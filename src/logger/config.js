@@ -184,7 +184,7 @@ export function createTransport (env) {
         level: numericLevel,
         stream: pino.destination({
           dest: logFile,
-          sync: true,  // В тестах всегда синхронно
+          sync: true, // В тестах всегда синхронно
           mkdir: true
         })
       })
@@ -196,7 +196,7 @@ export function createTransport (env) {
         colorize: config.colorize,
         translateTime: 'SYS:standard',
         ignore: 'pid,hostname',
-        sync: true  // В тестах всегда синхронно
+        sync: true // В тестах всегда синхронно
       }
 
       // Всегда используем pino-pretty для форматированного вывода в консоль

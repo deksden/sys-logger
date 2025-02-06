@@ -7,7 +7,7 @@
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.3.0.md
  */
 
-import { expect, vi } from 'vitest'
+import { expect, vi, describe, beforeEach, afterEach, test } from 'vitest'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { SystemError } from '@fab33/sys-errors'

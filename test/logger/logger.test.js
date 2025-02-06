@@ -7,7 +7,7 @@
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.3.0.md
  */
 
-import { expect, vi } from 'vitest'
+import { expect, vi, describe, beforeEach, afterEach, test } from 'vitest'
 import { dependencies as loggerDeps, setDependencies, createLogger } from '../../src/logger/logger.js'
 import { SystemError } from '@fab33/sys-errors'
 import { LOGGER_ERROR_CODES } from '../../src/logger/errors-logger.js'

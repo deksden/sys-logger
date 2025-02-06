@@ -16,7 +16,7 @@ const logger = createLogger('logger:format')
  */
 export const dependencies = {
   chalk,
-  JSON: JSON,
+  JSON,
   logger
 }
 
@@ -47,8 +47,7 @@ export function setDependencies (newDependencies) {
 export function formatForLog (obj, options = {}) {
   const { chalk, JSON, logger } = dependencies
   const {
-    colors = true,
-    showHidden = false
+    colors = true
   } = options
 
   // Обработка примитивных значений

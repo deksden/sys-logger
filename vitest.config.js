@@ -11,9 +11,8 @@ import { DefaultReporter } from 'vitest/reporters'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 class CustomReporter extends DefaultReporter {
-  onTestFileLoop() {
+  onTestFileLoop () {
     // Переопределяем метод, чтобы не выводить имена файлов
-    return
   }
 }
 

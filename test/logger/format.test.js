@@ -7,7 +7,7 @@
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.3.0.md
  */
 
-import { expect, vi } from 'vitest'
+import { expect, vi, describe, beforeEach, afterEach, test } from 'vitest'
 import {
   dependencies as formatDeps,
   setDependencies,
@@ -38,7 +38,7 @@ describe('(format.js) Модуль форматирования', () => {
     // Устанавливаем моки только для необходимых зависимостей
     setDependencies({
       chalk: mockChalk,
-      JSON: JSON, // Используем реальный JSON
+      JSON, // Используем реальный JSON
       logger // Используем реальный логгер
     })
 

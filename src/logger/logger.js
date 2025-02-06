@@ -88,8 +88,8 @@ import { createTransportError } from './error-fabs-logger.js'
 export const dependencies = {
   env: process.env,
   pino,
-  baseLogger: null,    // Логгер для тестирования
-  createTransport      // Из config.js
+  baseLogger: null, // Логгер для тестирования
+  createTransport // Из config.js
 }
 
 /**
@@ -147,7 +147,6 @@ function initializeBaseLogger (env) {
 
     dependencies.baseLogger = logger
     return logger
-
   } catch (error) {
     throw createTransportError('Failed to initialize base logger', error)
   }
@@ -164,7 +163,7 @@ function initializeBaseLogger (env) {
 function patternMatches (namespace, pattern) {
   const regex = pattern
     .replace(/^-/, '')
-    .replace(/[.:]/g, '\\$&')  // Экранируем и точку и двоеточие
+    .replace(/[.:]/g, '\\$&') // Экранируем и точку и двоеточие
     .replace(/\*/g, '.*')
   // Убираем $ в конце для поддержки вложенных namespace
   return new RegExp(`^${regex}`).test(namespace)
@@ -251,18 +250,18 @@ export function createLogger (namespace = undefined) {
     const nsFilter = !namespace?.trim()
       ? null
       : () => {
-        const debug = dependencies.env.DEBUG?.trim()
-        if (!debug) return false // Блокируем все при пустом DEBUG
+          const debug = dependencies.env.DEBUG?.trim()
+          if (!debug) return false // Блокируем все при пустом DEBUG
 
-        const patterns = debug.split(',').map(p => p.trim())
-        let enabled = patterns.includes('*')
-        for (const pattern of patterns) {
-          if (patternMatches(namespace, pattern)) {
-            enabled = !pattern.startsWith('-')
+          const patterns = debug.split(',').map(p => p.trim())
+          let enabled = patterns.includes('*')
+          for (const pattern of patterns) {
+            if (patternMatches(namespace, pattern)) {
+              enabled = !pattern.startsWith('-')
+            }
           }
+          return enabled
         }
-        return enabled
-      }
 
     // Создаем методы с фильтрацией
     return LOG_LEVELS.reduce((acc, level) => {

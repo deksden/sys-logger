@@ -6,7 +6,7 @@
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.1.0.md
  */
 
-import { expect, vi } from 'vitest'
+import { expect, vi, describe, beforeEach, afterEach, test } from 'vitest'
 import { createLogger } from '../../src/logger/logger.js'
 import { loadConfig, createTransport, setDependencies } from '../../src/logger/config.js'
 import { SystemError } from '@fab33/sys-errors'
@@ -56,7 +56,7 @@ describe('(config.js) Модуль конфигурации логгера', () 
       env: {
         LOG_LEVEL: 'info',
         LOG_FOLDER: 'test-logs',
-        LOG_FILE_OUTPUT: 'true',  // Явно включаем файловый вывод
+        LOG_FILE_OUTPUT: 'true', // Явно включаем файловый вывод
         LOG_CONSOLE_OUTPUT: 'true'
       }
     }
@@ -163,7 +163,7 @@ describe('(config.js) Модуль конфигурации логгера', () 
       mockDeps.fs.readFileSync.mockReturnValue('{"name": "test-app"}')
 
       // Действие
-      const result = createTransport(mockDeps.env)
+      createTransport(mockDeps.env)
 
       // Проверки
       const multistream = mockDeps.pino.multistream.mock.calls[0][0]
@@ -185,7 +185,7 @@ describe('(config.js) Модуль конфигурации логгера', () 
       mockDeps.fs.readFileSync.mockReturnValue('{"name": "test-app"}')
 
       // Действие
-      const result = createTransport(mockDeps.env)
+      createTransport(mockDeps.env)
 
       // Проверки
       const multistream = mockDeps.pino.multistream.mock.calls[0][0]
@@ -206,15 +206,16 @@ describe('(config.js) Модуль конфигурации логгера', () 
       mockDeps.fs.mkdirSync.mockImplementation(() => {
         throw error
       })
-      mockDeps.fs.existsSync.mockReturnValue(false)  // Директория не существует
+      mockDeps.fs.existsSync.mockReturnValue(false) // Директория не существует
       mockDeps.fs.readFileSync.mockReturnValue('{"name": "test-app"}')
-      mockDeps.env.LOG_FILE_OUTPUT = 'true'  // Явно включаем файловый вывод
+      mockDeps.env.LOG_FILE_OUTPUT = 'true' // Явно включаем файловый вывод
 
       try {
         // Действие
         createTransport(mockDeps.env)
         // Если не выбросило ошибку - тест должен упасть
-        expect(true).toBe(false, 'Ожидалась ошибка при создании директории логов')
+        // 'Ожидалась ошибка при создании директории логов'
+        expect(true).toBe(false)
       } catch (err) {
         // Проверки
         expect(err).toBeInstanceOf(SystemError)
