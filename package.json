@@ -1,0 +1,58 @@
+{
+  "name": "@fab33/sys-logger",
+  "version": "0.5.5",
+  "description": "Unified logging system with namespace filtering, log levels, and multiple transports support",
+  "type": "module",
+  "main": "src/logger/logger.js",
+  "files": [
+    "src/logger"
+  ],
+  "scripts": {
+    "test": "dotenvx run -- vitest run test/**/*.test.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "get-tree": "tree -a -L 5 --matchdirs --ignore-case --dirsfirst --sort name -I 'node_modules|docs|.aider*|.idea*|_legacy*|.git|*logs*' > all-files-and-directories.txt"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deksden/sys-logger.git"
+  },
+  "keywords": [
+    "logging",
+    "namespace",
+    "debug",
+    "log-levels",
+    "pino",
+    "file-logging",
+    "log-rotation",
+    "console-logging",
+    "structured-logging",
+    "colorized-output",
+    "sys-logger"
+  ],
+  "author": "(c) fab33,, by deksden",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/deksden/sys-logger/issues"
+  },
+  "homepage": "https://github.com/deksden/sys-logger#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.19.0",
+    "@vitest/coverage-v8": "^3.0.5",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jsdoc": "^50.6.3",
+    "eslint-plugin-n": "^17.15.1",
+    "eslint-plugin-promise": "^7.2.1",
+    "vitest": "^3.0.5"
+  },
+  "private": true
+}
