@@ -1,14 +1,19 @@
 /**
  * @file test/logger/config.test.js
- * @version 0.2.2
+ * @version 0.3.1
  * @tested-file src/logger/config.js
- * @tested-file-version 0.5.3
+ * @tested-file-version 0.6.1
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.1.0.md
  */
 
 import { expect, vi, describe, beforeEach, afterEach, test } from 'vitest'
 import { createLogger } from '../../src/logger/logger.js'
-import { loadConfig, createTransport, setDependencies } from '../../src/logger/config.js'
+import {
+  loadConfig,
+  createTransport,
+  setDependencies,
+  processFilenameTemplate
+} from '../../src/logger/config.js'
 import { SystemError } from '@fab33/sys-errors'
 import { LOGGER_ERROR_CODES } from '../../src/logger/errors-logger.js'
 
@@ -19,6 +24,11 @@ describe('(config.js) Модуль конфигурации логгера', () 
 
   beforeEach(() => {
     mockLogger = createLogger('test:logger:config')
+
+    // Устанавливаем фиксированное время для тестов
+    vi.setSystemTime(new Date('2024-01-01T12:00:00.000Z'))
+    // Добавляем мок для Date.now
+    vi.spyOn(Date, 'now').mockImplementation(() => new Date().getTime())
 
     // Создаем базовые моки для стримов
     const mockStream = {
@@ -50,7 +60,10 @@ describe('(config.js) Модуль конфигурации логгера', () 
           streams,
           write: mockStream.write,
           end: mockStream.end
-        }))
+        })),
+        transport: vi.fn().mockReturnValue({
+          // Мок для pino.transport
+        })
       },
       pretty: mockPretty,
       env: {
@@ -67,6 +80,7 @@ describe('(config.js) Модуль конфигурации логгера', () 
 
   afterEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   describe('loadConfig() - Загрузка конфигурации', () => {
@@ -84,7 +98,8 @@ describe('(config.js) Модуль конфигурации логгера', () 
         consoleOutput: true,
         logFolder: 'test-logs',
         sync: false,
-        pretty: false
+        pretty: false,
+        transportConfigs: [] // Новое поле для конфигураций транспортов
       })
 
       mockLogger.debug({ config }, 'Конфигурация загружена с дефолтными значениями')
@@ -115,10 +130,81 @@ describe('(config.js) Модуль конфигурации логгера', () 
         consoleOutput: false,
         logFolder: '/custom/logs',
         sync: true,
-        pretty: true
+        pretty: true,
+        transportConfigs: []
       })
 
       mockLogger.debug({ config }, 'Конфигурация загружена из окружения')
+    }, 2000)
+
+    test('должен обрабатывать настройки множественных транспортов', () => {
+      mockLogger.trace('Тестирование настроек множественных транспортов')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'console',
+        TRANSPORT1_LEVEL: 'debug',
+        TRANSPORT1_COLORS: 'true',
+        TRANSPORT2: 'file',
+        TRANSPORT2_LEVEL: 'error',
+        TRANSPORT2_FOLDER: '/custom/logs',
+        TRANSPORT2_FILENAME: '{app_name}_{date}.log'
+      }
+
+      // Действие
+      const config = loadConfig(mockDeps.env)
+
+      // Проверки
+      expect(config.transportConfigs).toHaveLength(2)
+
+      // Проверка консольного транспорта
+      expect(config.transportConfigs[0]).toMatchObject({
+        type: 'console',
+        level: 'debug',
+        colors: true,
+        enabled: true
+      })
+
+      // Проверка файлового транспорта
+      expect(config.transportConfigs[1]).toMatchObject({
+        type: 'file',
+        level: 'error',
+        folder: '/custom/logs',
+        filename: '{app_name}_{date}.log',
+        enabled: true
+      })
+
+      mockLogger.debug({ config }, 'Настройки множественных транспортов загружены')
+    }, 2000)
+  })
+
+  describe('processFilenameTemplate() - Обработка шаблонов', () => {
+    test('должен корректно обрабатывать шаблоны в имени файла', () => {
+      mockLogger.trace('Тестирование обработки шаблонов')
+
+      // Мокаем время для предсказуемого результата - уже установлено в beforeEach
+
+      // Мокаем метод для загрузки информации о приложении
+      mockDeps.fs.readFileSync.mockReturnValue('{"name": "test-app", "version": "1.2.3"}')
+
+      // Проверяем разные шаблоны
+      const templates = {
+        '{app_name}.log': 'test-app.log',
+        '{app_name}_{date}.log': 'test-app_2024-01-01.log',
+        'logs/{datetime}/{app_name}.log': 'logs/2024-01-01_12-00-00/test-app.log',
+        '{app_name}_v{app_version}_{date}.log': 'test-app_v1.2.3_2024-01-01.log'
+      }
+
+      for (const [template, expected] of Object.entries(templates)) {
+        const result = processFilenameTemplate(template)
+        expect(result).toBe(expected)
+      }
+
+      // Проверяем значение по умолчанию
+      expect(processFilenameTemplate()).toBe('app.log')
+      expect(processFilenameTemplate('')).toBe('app.log')
+
+      mockLogger.debug('Шаблоны в именах файлов обработаны корректно')
     }, 2000)
   })
 
@@ -175,7 +261,6 @@ describe('(config.js) Модуль конфигурации логгера', () 
         prettyOptions
       }, 'Создан только консольный транспорт')
     }, 2000)
-
     test('должен создать транспорт по умолчанию если отключены все', () => {
       mockLogger.trace('Тестирование создания дефолтного транспорта')
 
@@ -231,6 +316,233 @@ describe('(config.js) Модуль конфигурации логгера', () 
       }
 
       mockLogger.debug('Ошибка создания директории обработана')
+    }, 2000)
+
+    test('должен использовать pino.transport для новых настроек транспортов', () => {
+      mockLogger.trace('Тестирование создания транспортов через pino.transport')
+
+      // Подготовка - настраиваем множественные транспорты
+      mockDeps.env = {
+        TRANSPORT1: 'console',
+        TRANSPORT1_LEVEL: 'debug',
+        TRANSPORT1_COLORS: 'true',
+        TRANSPORT2: 'file',
+        TRANSPORT2_LEVEL: 'error',
+        TRANSPORT2_FOLDER: '/custom/logs',
+        TRANSPORT2_FILENAME: '{app_name}.log'
+      }
+
+      // Мокаем результат pino.transport
+      const mockTransport = { /* мок транспорта */ }
+      mockDeps.pino.transport.mockReturnValue(mockTransport)
+
+      // Действие
+      const result = createTransport(mockDeps.env)
+
+      // Проверки
+      expect(result).toEqual({
+        level: 20, // debug (минимальный из заданных уровней)
+        transport: mockTransport
+      })
+
+      // Проверяем вызов pino.transport с правильными параметрами
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            level: 'debug',
+            target: 'pino-pretty',
+            options: expect.objectContaining({
+              colorize: true
+            })
+          }),
+          expect.objectContaining({
+            level: 'error',
+            target: 'pino/file',
+            options: expect.any(Object)
+          })
+        ],
+        dedupe: false
+      })
+
+      mockLogger.debug('Транспорты через pino.transport созданы успешно')
+    }, 2000)
+
+    test('должен обрабатывать специфичные настройки консольного транспорта', () => {
+      mockLogger.trace('Тестирование специфичных настроек консольного транспорта')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'console',
+        TRANSPORT1_LEVEL: 'info',
+        TRANSPORT1_COLORS: 'false',
+        TRANSPORT1_TRANSLATE_TIME: 'ISO:yyyy-mm-dd',
+        TRANSPORT1_IGNORE: 'hostname,pid,time',
+        TRANSPORT1_SINGLE_LINE: 'true',
+        TRANSPORT1_HIDE_OBJECT_KEYS: 'password,secret',
+        TRANSPORT1_SHOW_METADATA: 'true'
+      }
+
+      // Действие
+      createTransport(mockDeps.env)
+
+      // Проверка
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            target: 'pino-pretty',
+            options: expect.objectContaining({
+              colorize: false,
+              translateTime: 'ISO:yyyy-mm-dd',
+              ignore: 'hostname,pid,time',
+              singleLine: true,
+              hideObject: ['password', 'secret'],
+              messageKey: 'msg',
+              levelKey: 'level',
+              timestampKey: 'time'
+            })
+          })
+        ],
+        dedupe: false
+      })
+
+      mockLogger.debug('Специфичные настройки консольного транспорта обработаны')
+    }, 2000)
+
+    test('должен обрабатывать специфичные настройки файлового транспорта', () => {
+      mockLogger.trace('Тестирование специфичных настроек файлового транспорта')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'file',
+        TRANSPORT1_LEVEL: 'error',
+        TRANSPORT1_FOLDER: '/var/logs',
+        TRANSPORT1_FILENAME: 'error_{date}.log',
+        TRANSPORT1_MKDIR: 'true',
+        TRANSPORT1_APPEND: 'false',
+        TRANSPORT1_SYNC: 'true',
+        TRANSPORT1_ROTATE: 'true',
+        TRANSPORT1_ROTATE_MAX_SIZE: '5242880',
+        TRANSPORT1_ROTATE_MAX_FILES: '10',
+        TRANSPORT1_ROTATE_COMPRESS: 'true'
+      }
+
+      // Действие
+      createTransport(mockDeps.env)
+
+      // Проверки
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            level: 'error',
+            target: 'pino/file',
+            options: expect.objectContaining({
+              mkdir: true,
+              append: false,
+              sync: true
+            })
+          })
+        ],
+        dedupe: false
+      })
+
+      mockLogger.debug('Специфичные настройки файлового транспорта обработаны')
+    }, 2000)
+
+    test('должен корректно обрабатывать destination как файловый дескриптор', () => {
+      mockLogger.trace('Тестирование destination как файлового дескриптора')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'file',
+        TRANSPORT1_LEVEL: 'info',
+        TRANSPORT1_DESTINATION: '1', // stdout
+        TRANSPORT2: 'file',
+        TRANSPORT2_LEVEL: 'error',
+        TRANSPORT2_DESTINATION: '2' // stderr
+      }
+
+      // Действие
+      createTransport(mockDeps.env)
+
+      // Проверки
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            level: 'info',
+            target: 'pino/file',
+            options: expect.objectContaining({
+              destination: 1 // Числовой дескриптор
+            })
+          }),
+          expect.objectContaining({
+            level: 'error',
+            target: 'pino/file',
+            options: expect.objectContaining({
+              destination: 2 // Числовой дескриптор
+            })
+          })
+        ],
+        dedupe: false
+      })
+
+      mockLogger.debug('Файловые дескрипторы обработаны корректно')
+    }, 2000)
+
+    test('должен отфильтровывать отключенные транспорты', () => {
+      mockLogger.trace('Тестирование фильтрации отключенных транспортов')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'console',
+        TRANSPORT1_LEVEL: 'debug',
+        TRANSPORT1_ENABLED: 'false', // Отключен
+        TRANSPORT2: 'file',
+        TRANSPORT2_LEVEL: 'error',
+        TRANSPORT2_FOLDER: '/custom/logs'
+      }
+
+      // Действие
+      createTransport(mockDeps.env)
+
+      // Проверки - должен быть только один транспорт
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            level: 'error',
+            target: 'pino/file'
+          })
+        ],
+        dedupe: false
+      })
+
+      mockLogger.debug('Отключенные транспорты отфильтрованы')
+    }, 2000)
+
+    test('должен создать дефолтный транспорт если все отключены', () => {
+      mockLogger.trace('Тестирование создания дефолтного транспорта при отключенных')
+
+      // Подготовка
+      mockDeps.env = {
+        TRANSPORT1: 'console',
+        TRANSPORT1_ENABLED: 'false', // Отключен
+        TRANSPORT2: 'file',
+        TRANSPORT2_ENABLED: 'false' // Тоже отключен
+      }
+
+      // Действие
+      createTransport(mockDeps.env)
+
+      // Проверки - должен быть дефолтный транспорт
+      expect(mockDeps.pino.transport).toHaveBeenCalledWith({
+        targets: [
+          expect.objectContaining({
+            level: 'info', // Дефолтный уровень
+            target: 'pino-pretty'
+          })
+        ]
+      })
+
+      mockLogger.debug('Создан дефолтный транспорт при отключенных')
     }, 2000)
   })
 })

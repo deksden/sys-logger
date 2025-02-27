@@ -1,0 +1,40 @@
+{
+  "output": {
+    "filePath": "_repo.xml",
+    "style": "xml",
+    "parsableStyle": false,
+    "fileSummary": true,
+    "directoryStructure": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "topFilesLength": 5,
+    "showLineNumbers": false,
+    "copyToClipboard": true
+  },
+  "include": [],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "data",
+      "logs",
+      ".idea",
+      ".run",
+      ".aider",
+      "*.patch",
+      "*.log",
+      "docs/_legacy/",
+      "LICENSE",
+      "log.txt",
+      "all-files*.*",
+      "repomix*.*",
+      "_repo"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}

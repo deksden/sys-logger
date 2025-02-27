@@ -1,0 +1,28 @@
+.
+├── src
+│   └── logger
+│       ├── config.js
+│       ├── error-fabs-logger.js
+│       ├── errors-logger.js
+│       ├── logger.js
+│       └── rotate.js
+├── test
+│   └── logger
+│       ├── config.test.js
+│       ├── logger.test.js
+│       └── rotate.test.js
+├── .env
+├── .env.example
+├── .gitignore
+├── LICENSE
+├── README.md
+├── _repo.txt
+├── all-files-and-directories.txt
+├── eslint.config.js
+├── map_support.patch
+├── package-lock.json
+├── package.json
+├── repomix.config.json
+└── vitest.config.js
+
+5 directories, 21 files

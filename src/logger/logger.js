@@ -1,7 +1,7 @@
 /**
  * @file src/logger/logger.js
  * @description Основной модуль подсистемы логирования для создания логгеров с фильтрацией по namespace
- * @version 0.5.6
+ * @version 0.6.3
  *
  * @example
  * Создание логгера:
@@ -89,7 +89,8 @@ export const dependencies = {
   env: process.env,
   pino,
   baseLogger: null, // Логгер для тестирования
-  createTransport // Из config.js
+  createTransport, // Из config.js
+  Date // Добавляем Date для тестирования
 }
 
 /**
@@ -110,45 +111,65 @@ export function setDependencies (newDependencies) {
  */
 function getLevelName (level) {
   const levels = {
-    10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal'
+    10: 'trace',
+    20: 'debug',
+    30: 'info',
+    40: 'warn',
+    50: 'error',
+    60: 'fatal'
   }
   return levels[level] || 'info'
 }
 
 /**
- * Преобразует Map в обычный объект рекурсивно
+ * Преобразует Map в обычный объект рекурсивно с учетом настроек глубины
+ *
+ * Ограничение вложенности применяется только к структурам Map:
+ * - При достижении максимальной глубины Map заменяется на '[Max Map Depth Reached]'
+ * - Глубина Map уменьшается на 1 с каждым уровнем вложенности
+ *
+ * Для обычных объектов ограничение глубины не применяется вообще, независимо
+ * от параметра mapDepthOnly. Все вложенные объекты обрабатываются полностью.
  *
  * @param {*} value - Значение для преобразования
- * @param {number} [depth=5] - Максимальная глубина рекурсии
+ * @param {number} depth - Максимальная глубина рекурсии (только для Map структур)
+ * @param {boolean} mapDepthOnly - Зарезервировано для обратной совместимости (не используется)
  * @returns {*} Преобразованное значение
  * @private
  */
-function convertMapsToObjects (value, depth = 10) {
-  if (depth <= 0) return '[Max Depth Reached]'
-
-  // Для Map преобразуем в объект
+function convertMapsToObjects (value, depth = 8, mapDepthOnly = true) {
+  // Для Map структур
   if (value instanceof Map) {
+    // Проверка глубины для Map структур согласно ожиданиям тестов
+    if (depth <= 0) {
+      return '[Max Map Depth Reached]'
+    }
+
     const obj = {}
     for (const [k, v] of value.entries()) {
-      obj[String(k)] = convertMapsToObjects(v, depth - 1)
+      // Для Map всегда уменьшаем глубину на 1 при рекурсии
+      obj[String(k)] = convertMapsToObjects(v, depth - 1, mapDepthOnly)
     }
     return obj
   }
 
-  // Для массивов обрабатываем каждый элемент
+  // Для массивов
   if (Array.isArray(value)) {
-    return value.map(item => convertMapsToObjects(item, depth - 1))
+    // Для элементов массива передаем текущую глубину без изменений
+    return value.map(item => convertMapsToObjects(item, depth, mapDepthOnly))
   }
 
-  // Для объектов обрабатываем значения
-  if (value && typeof value === 'object') {
+  // Для обычных объектов - всегда обрабатываем без ограничений глубины
+  if (value && typeof value === 'object' && !(value instanceof Error)) {
     const result = {}
     for (const [k, v] of Object.entries(value)) {
-      result[k] = convertMapsToObjects(v, depth - 1)
+      // Не меняем глубину для обычных объектов, всегда передаем текущую глубину
+      result[k] = convertMapsToObjects(v, depth, mapDepthOnly)
     }
     return result
   }
 
+  // Примитивы и другие типы данных возвращаем без изменений
   return value
 }
 
@@ -165,13 +186,32 @@ function convertMapsToObjects (value, depth = 10) {
 function initializeBaseLogger (env) {
   try {
     const { pino, createTransport } = dependencies
-    const config = createTransport(env)
-    const levelName = getLevelName(config.level)
+    const transport = createTransport(env)
 
-    const logger = pino({
-      level: levelName, timestamp: true
-    }, config.transport)
+    // Определяем базовые опции
+    const options = {
+      timestamp: true
+    }
 
+    // Устанавливаем уровень логирования
+    if (transport.level) {
+      const levelName = getLevelName(transport.level)
+      options.level = levelName
+    }
+
+    // Создаем логгер
+    let logger
+
+    // Если у нас новый формат транспорта через worker threads
+    if (transport.transport && typeof transport.transport.pipe !== 'function') {
+      logger = pino(options, transport.transport)
+    } else {
+      // Старый формат с multistream
+      logger = pino(options, transport.transport)
+    }
+
+    // Проверяем, что уровень установлен правильно
+    const levelName = getLevelName(transport.level)
     if (!logger[levelName]) {
       throw new Error(`Logger initialization failed - invalid level: ${levelName}`)
     }
@@ -219,7 +259,10 @@ function wrapLogMethod (logger, method) {
   return function (...args) {
     if (args.length === 0) return
 
-    const maxDepth = parseInt(dependencies.env.LOG_MAX_MAP_DEPTH, 10) || 10
+    // Получаем настройки глубины из окружения
+    const maxDepth = parseInt(dependencies.env.LOG_MAX_DEPTH, 10) || 8
+    const mapDepthOnly = dependencies.env.LOG_MAP_DEPTH_ONLY !== 'false'
+
     const firstArg = args[0]
 
     // Преобразуем все аргументы, которые являются объектами
@@ -228,7 +271,7 @@ function wrapLogMethod (logger, method) {
         return { err: arg }
       }
       if (typeof arg === 'object' && arg !== null) {
-        return convertMapsToObjects(arg, maxDepth)
+        return convertMapsToObjects(arg, maxDepth, mapDepthOnly)
       }
       return arg
     })
@@ -270,7 +313,6 @@ function wrapLogMethod (logger, method) {
  * - Фильтрация сообщений по namespace через механизм DEBUG
  * - Поддержка всех вариантов вызова методов pino
  * - Специальная обработка Error объектов
- * - Корректное преобразование Map структур
  * - Поддержка форматирования сообщений через плейсхолдеры
  *
  * Плейсхолдеры для форматирования:
@@ -317,7 +359,9 @@ export function createLogger (namespace = undefined) {
       return acc
     }, {})
   } catch (error) {
-    throw createTransportError('Failed to create logger', error)
+    // Не оборачиваем повторно ошибку из initializeBaseLogger
+    // Просто пробрасываем её дальше, сохраняя исходное сообщение и цепочку
+    throw error
   }
 }
 

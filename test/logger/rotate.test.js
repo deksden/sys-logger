@@ -1,6 +1,6 @@
 /**
  * @file test/logger/rotate.test.js
- * @version 0.3.1
+ * @version 0.3.2
  * @description Тесты модуля ротации и архивирования лог файлов
  * @tested-file src/logger/rotate.js
  * @tested-file-version 0.1.2
@@ -42,6 +42,8 @@ describe('(rotate.js) Модуль ротации и архивирования 
 
     // Устанавливаем фиксированное время для тестов
     vi.setSystemTime(new Date('2024-01-01T12:00:00.000Z'))
+    // Добавляем мок для Date.now
+    vi.spyOn(Date, 'now').mockImplementation(() => new Date().getTime())
 
     // Создаем моки
     mockFs = {

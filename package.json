@@ -1,7 +1,7 @@
 {
   "name": "@fab33/sys-logger",
-  "version": "0.5.5",
-  "description": "Unified logging system with namespace filtering, log levels, and multiple transports support",
+  "version": "0.6.3",
+  "description": "Unified logging system with configurable transports, namespace filtering, and log levels",
   "type": "module",
   "main": "src/logger/logger.js",
   "files": [
@@ -11,7 +11,8 @@
     "test": "dotenvx run -- vitest run test/**/*.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "get-tree": "tree -a -L 5 --matchdirs --ignore-case --dirsfirst --sort name -I 'node_modules|docs|.aider*|.idea*|_legacy*|.git|*logs*' > all-files-and-directories.txt"
+    "get-tree": "tree -a -L 5 --matchdirs --ignore-case --dirsfirst --sort name -I 'node_modules|docs|.aider*|.idea*|_legacy*|.git|*logs*' > all-files-and-directories.txt",
+    "repomix:all": "repomix"
   },
   "repository": {
     "type": "git",
@@ -28,7 +29,8 @@
     "console-logging",
     "structured-logging",
     "colorized-output",
-    "sys-logger"
+    "sys-logger",
+    "multiple-transports"
   ],
   "author": "(c) fab33,, by deksden",
   "license": "MIT",
