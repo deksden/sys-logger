@@ -1,9 +1,9 @@
 /**
  * @file test/logger/logger.test.js
  * @description Тесты основного модуля логирования
- * @version 0.5.4
+ * @version 0.5.5
  * @tested-file src/logger/logger.js
- * @tested-file-version 0.5.5
+ * @tested-file-version 0.5.6
  * @test-doc docs/tests/TESTS_SYS_LOGGER, v0.3.0.md
  */
 
@@ -121,6 +121,115 @@ describe('(logger.js) Модуль основного логирования', (
       // error
       testLogger.error(testError)
       expect(mockPinoLogger.error).toHaveBeenCalledWith({ err: testError })
+    })
+    test('корректно логирует Map в разных форматах вызова', () => {
+      logger.trace('Тест: логирование Map в разных форматах')
+
+      const testLogger = createLogger()
+      const testMap = new Map([
+        ['key1', 'value1'],
+        ['key2', new Map([['nested', 'value']])]
+      ])
+
+      // Тест 1: Объект с Map как первый аргумент
+      const testObj = {
+        normalField: 'test',
+        mapField: testMap
+      }
+      testLogger.info(testObj)
+
+      // Тест 2: Map в плейсхолдерах
+      testLogger.info('Test data: %j', { map: testMap })
+
+      // Тест 3: Контекст с Map + сообщение с Map в плейсхолдере
+      testLogger.info(
+        { context: testMap },
+        'Message with map: %j',
+        { anotherMap: testMap }
+      )
+
+      // Проверяем вызовы
+      expect(mockPinoLogger.info).toHaveBeenNthCalledWith(1, {
+        normalField: 'test',
+        mapField: {
+          key1: 'value1',
+          key2: {
+            nested: 'value'
+          }
+        }
+      })
+
+      expect(mockPinoLogger.info).toHaveBeenNthCalledWith(2,
+        undefined,
+        'Test data: %j',
+        {
+          map: {
+            key1: 'value1',
+            key2: {
+              nested: 'value'
+            }
+          }
+        }
+      )
+
+      expect(mockPinoLogger.info).toHaveBeenNthCalledWith(3,
+        {
+          context: {
+            key1: 'value1',
+            key2: {
+              nested: 'value'
+            }
+          }
+        },
+        'Message with map: %j',
+        {
+          anotherMap: {
+            key1: 'value1',
+            key2: {
+              nested: 'value'
+            }
+          }
+        }
+      )
+
+      logger.debug('Map структуры преобразованы корректно во всех форматах')
+    })
+
+    test('соблюдает максимальную глубину для Map структур', () => {
+      logger.trace('Тест: ограничение глубины Map')
+
+      const testLogger = createLogger()
+
+      // Создаем глубоко вложенную Map структуру
+      const deepMap = new Map([
+        ['level1', new Map([
+          ['level2', new Map([
+            ['level3', new Map([
+              ['level4', new Map([
+                ['level5', 'too deep']
+              ])]
+            ])]
+          ])]
+        ])]
+      ])
+
+      // Логируем структуру
+      testLogger.info({ deep: deepMap })
+
+      // Проверяем, что [Max Depth Reached] появляется на 4-м уровне
+      expect(mockPinoLogger.info).toHaveBeenCalledWith({
+        deep: {
+          level1: {
+            level2: {
+              level3: {
+                level4: '[Max Depth Reached]'
+              }
+            }
+          }
+        }
+      })
+
+      logger.debug('Ограничение глубины Map работает корректно')
     })
 
     test('создание логгера с namespace', () => {

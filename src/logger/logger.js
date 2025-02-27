@@ -1,7 +1,7 @@
 /**
  * @file src/logger/logger.js
  * @description Основной модуль подсистемы логирования для создания логгеров с фильтрацией по namespace
- * @version 0.5.5
+ * @version 0.5.6
  *
  * @example
  * Создание логгера:
@@ -110,14 +110,46 @@ export function setDependencies (newDependencies) {
  */
 function getLevelName (level) {
   const levels = {
-    10: 'trace',
-    20: 'debug',
-    30: 'info',
-    40: 'warn',
-    50: 'error',
-    60: 'fatal'
+    10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal'
   }
   return levels[level] || 'info'
+}
+
+/**
+ * Преобразует Map в обычный объект рекурсивно
+ *
+ * @param {*} value - Значение для преобразования
+ * @param {number} [depth=5] - Максимальная глубина рекурсии
+ * @returns {*} Преобразованное значение
+ * @private
+ */
+function convertMapsToObjects (value, depth = 10) {
+  if (depth <= 0) return '[Max Depth Reached]'
+
+  // Для Map преобразуем в объект
+  if (value instanceof Map) {
+    const obj = {}
+    for (const [k, v] of value.entries()) {
+      obj[String(k)] = convertMapsToObjects(v, depth - 1)
+    }
+    return obj
+  }
+
+  // Для массивов обрабатываем каждый элемент
+  if (Array.isArray(value)) {
+    return value.map(item => convertMapsToObjects(item, depth - 1))
+  }
+
+  // Для объектов обрабатываем значения
+  if (value && typeof value === 'object') {
+    const result = {}
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = convertMapsToObjects(v, depth - 1)
+    }
+    return result
+  }
+
+  return value
 }
 
 /**
@@ -137,8 +169,7 @@ function initializeBaseLogger (env) {
     const levelName = getLevelName(config.level)
 
     const logger = pino({
-      level: levelName,
-      timestamp: true
+      level: levelName, timestamp: true
     }, config.transport)
 
     if (!logger[levelName]) {
@@ -174,6 +205,7 @@ function patternMatches (namespace, pattern) {
  *
  * Основная ответственность:
  * - Обработка разных форматов входных аргументов
+ * - Преобразование Map в объекты для корректного логирования
  * - Корректная передача аргументов в pino
  * - Специальная обработка объектов Error
  * - Сохранение контекста лога
@@ -187,34 +219,46 @@ function wrapLogMethod (logger, method) {
   return function (...args) {
     if (args.length === 0) return
 
+    const maxDepth = parseInt(dependencies.env.LOG_MAX_MAP_DEPTH, 10) || 10
     const firstArg = args[0]
 
-    // Если первый аргумент это Error
+    // Преобразуем все аргументы, которые являются объектами
+    const convertedArgs = args.map(arg => {
+      if (arg instanceof Error) {
+        return { err: arg }
+      }
+      if (typeof arg === 'object' && arg !== null) {
+        return convertMapsToObjects(arg, maxDepth)
+      }
+      return arg
+    })
+
+    // Если первый аргумент был Error
     if (firstArg instanceof Error) {
-      return logger[method]({ err: firstArg })
+      return logger[method](convertedArgs[0])
     }
 
-    // Если первый аргумент это объект (но не Error)
+    // Если первый аргумент это объект (но не Error и не строка)
     if (typeof firstArg === 'object' && firstArg !== null) {
       // Если в объекте есть Error, обрабатываем его специально
       if (firstArg.err instanceof Error) {
-        const { err, ...rest } = firstArg
+        const { err, ...rest } = convertedArgs[0]
         return logger[method]({
           ...rest,
           err: {
-            message: err.message,
-            stack: err.stack,
-            type: err.constructor.name,
-            code: err.code
+            message: firstArg.err.message,
+            stack: firstArg.err.stack,
+            type: firstArg.err.constructor.name,
+            code: firstArg.err.code
           }
-        }, ...args.slice(1))
+        }, ...convertedArgs.slice(1))
       }
-      // Передаем объект как есть
-      return logger[method](firstArg, ...args.slice(1))
+      // Передаем преобразованный объект и остальные аргументы
+      return logger[method](...convertedArgs)
     }
 
-    // Для остальных случаев передаем аргументы напрямую
-    return logger[method](undefined, ...args)
+    // Для остальных случаев (строка с плейсхолдерами или просто строка)
+    return logger[method](undefined, ...convertedArgs)
   }
 }
 
@@ -226,6 +270,7 @@ function wrapLogMethod (logger, method) {
  * - Фильтрация сообщений по namespace через механизм DEBUG
  * - Поддержка всех вариантов вызова методов pino
  * - Специальная обработка Error объектов
+ * - Корректное преобразование Map структур
  * - Поддержка форматирования сообщений через плейсхолдеры
  *
  * Плейсхолдеры для форматирования:
@@ -247,21 +292,19 @@ export function createLogger (namespace = undefined) {
     const child = namespace ? baseLogger.child({ namespace }) : baseLogger
 
     // Фильтр по namespace через DEBUG
-    const nsFilter = !namespace?.trim()
-      ? null
-      : () => {
-          const debug = dependencies.env.DEBUG?.trim()
-          if (!debug) return false // Блокируем все при пустом DEBUG
+    const nsFilter = !namespace?.trim() ? null : () => {
+      const debug = dependencies.env.DEBUG?.trim()
+      if (!debug) return false // Блокируем все при пустом DEBUG
 
-          const patterns = debug.split(',').map(p => p.trim())
-          let enabled = patterns.includes('*')
-          for (const pattern of patterns) {
-            if (patternMatches(namespace, pattern)) {
-              enabled = !pattern.startsWith('-')
-            }
-          }
-          return enabled
+      const patterns = debug.split(',').map(p => p.trim())
+      let enabled = patterns.includes('*')
+      for (const pattern of patterns) {
+        if (patternMatches(namespace, pattern)) {
+          enabled = !pattern.startsWith('-')
         }
+      }
+      return enabled
+    }
 
     // Создаем методы с фильтрацией
     return LOG_LEVELS.reduce((acc, level) => {

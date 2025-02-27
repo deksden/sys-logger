@@ -1,4 +1,4 @@
-# Подсистема логирования (docs/logger/DOC_SYS_LOGGER.md, v0.1.1)
+# Подсистема логирования (docs/logger/DOC_SYS_LOGGER.md, v0.1.2)
 
 Подсистема SYS_LOGGER предоставляет унифицированный механизм логирования для всех компонентов системы. 
 
@@ -7,8 +7,8 @@
 - 📝 Централизованное логирование через единый интерфейс
 - 🎚️ Уровни логирования от trace до fatal
 - 🔍 Фильтрация сообщений по namespace через DEBUG
-- 🎨 Цветной вывод в консоль и запись в файлы
-- 📐 Форматированный вывод сообщений
+- 🎨 Цветной вывод в консоль через pino-pretty 
+- 📐 Форматированный вывод сообщений через pino-pretty
 - 🔄 Автоматическая ротация лог файлов
 - ⚠️ Структурированные ошибки через SYS_ERRORS
 
@@ -72,6 +72,7 @@ logger.error({ error }, 'Operation failed')
   ```
 
 ## Фильтрация по уровням через LOG_LEVEL
+
 Переменная окружения LOG_LEVEL определяет минимальный уровень для вывода сообщений:
 
 ```bash
@@ -152,7 +153,7 @@ logger.debug('Request from %s to %s', sourceIp, targetIp)
 const user = { id: 123, name: 'John' }
 logger.info('User data: %o', user)
 
-// Комбинация контекста и placeholders
+// Комбинация контекста и placeholders 
 logger.info({ requestId }, 'User %s made request to %s', username, endpoint)
 ```
 
@@ -162,127 +163,6 @@ logger.info({ requestId }, 'User %s made request to %s', username, endpoint)
 - %o или %O - объекты (с разной глубиной вложенности)
 - %j - JSON.stringify для объектов
 - %% - вывод символа %
-
-## Работа с ошибками
-
-Интеграция с SYS_ERRORS обеспечивает корректное логирование ошибок:
-
-```javascript
-try {
-  await riskyOperation()
-} catch (error) {
-  // Автоматически извлекается код, контекст и цепочка ошибок
-  logger.error({ error }, 'Operation failed')
-}
-```
-
-## Примеры использования
-
-### Логирование HTTP запросов
-
-```javascript
-const apiLogger = createLogger('api:requests')
-
-async function handleRequest(req, res) {
-  // Входящий запрос
-  apiLogger.debug({ 
-    method: req.method,
-    path: req.path,
-    query: req.query
-  }, 'Incoming request')
-
-  try {
-    const result = await processRequest(req)
-    
-    // Успешный ответ
-    apiLogger.info({
-      requestId: req.id,
-      duration: Date.now() - req.startTime
-    }, 'Request completed successfully')
-
-    return result
-
-  } catch (error) {
-    // Ошибка обработки
-    apiLogger.error({
-      error,
-      requestId: req.id,
-      params: req.params
-    }, 'Request processing failed')
-
-    throw error
-  }
-}
-```
-
-### Логирование операций с файлами
-
-```javascript
-const fsLogger = createLogger('filesystem')
-
-async function processFile(filepath) {
-  fsLogger.debug({ filepath }, 'Starting file processing')
-
-  try {
-    const stats = await fs.stat(filepath)
-    fsLogger.trace({ stats }, 'File stats loaded')
-
-    const content = await fs.readFile(filepath)
-    fsLogger.debug({ size: content.length }, 'File loaded')
-
-    const result = await processContent(content)
-    fsLogger.info({ 
-      filepath,
-      processingTime: Date.now() - startTime
-    }, 'File processed successfully')
-
-    return result
-
-  } catch (error) {
-    fsLogger.error({
-      error,
-      filepath,
-      operation: error.syscall || 'unknown'
-    }, 'File processing failed')
-    
-    throw error
-  }
-}
-```
-
-### Мониторинг производительности
-
-```javascript
-const perfLogger = createLogger('perf')
-
-async function measureOperation() {
-  const start = process.hrtime()
-
-  try {
-    const result = await operation()
-    
-    const [seconds, nanoseconds] = process.hrtime(start)
-    const duration = seconds * 1000 + nanoseconds / 1000000
-
-    perfLogger.info({
-      operation: 'example',
-      durationMs: duration,
-      success: true
-    }, 'Operation timing')
-
-    return result
-
-  } catch (error) {
-    perfLogger.warn({
-      error,
-      operation: 'example',
-      failurePoint: error.phase || 'unknown'
-    }, 'Operation failed')
-
-    throw error
-  }
-}
-```
 
 ## Лучшие практики
 
