@@ -25,6 +25,7 @@
       "*.log",
       "docs/_legacy/",
       "LICENSE",
+      "docs/RULEZZ.md",
       "log.txt",
       "all-files*.*",
       "repomix*.*",

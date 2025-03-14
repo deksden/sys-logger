@@ -20,6 +20,7 @@
 
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { fileURLToPath } from 'url'
 import pino from 'pino'
 import pretty from 'pino-pretty'
@@ -117,7 +118,7 @@ export function processFilenameTemplate (template) {
     .replace(/{app_name}/g, appInfo.name)
     .replace(/{app_version}/g, appInfo.version)
     .replace(/{pid}/g, process.pid)
-    .replace(/{hostname}/g, require('os').hostname())
+    .replace(/{hostname}/g, os.hostname())
 }
 
 /**
@@ -255,9 +256,9 @@ function createPinoTransports (transportConfigs) {
           translateTime: config.translateTime,
           ignore: config.ignore,
           singleLine: config.singleLine,
-          hideObject: config.hideObjectKeys.split(',').filter(k => k),
-          messageKey: config.messageKey,
-          levelKey: config.levelKey,
+          // hideObject: config.hideObjectKeys.split(',').filter(k => k),
+          // messageKey: config.messageKey,
+          // levelKey: config.levelKey,
           timestampKey: config.timestampKey
         }
       }

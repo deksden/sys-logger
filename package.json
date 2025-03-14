@@ -1,6 +1,6 @@
 {
   "name": "@fab33/sys-logger",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Unified logging system with configurable transports, namespace filtering, and log levels",
   "type": "module",
   "main": "src/logger/logger.js",
@@ -11,6 +11,7 @@
     "test": "dotenvx run -- vitest run test/**/*.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "link:all": "npm link @fab33/sys-errors",
     "get-tree": "tree -a -L 5 --matchdirs --ignore-case --dirsfirst --sort name -I 'node_modules|docs|.aider*|.idea*|_legacy*|.git|*logs*' > all-files-and-directories.txt",
     "repomix:all": "repomix"
   },

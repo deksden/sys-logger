@@ -1,7 +1,7 @@
 /**
  * @file src/logger/logger.js
  * @description Основной модуль подсистемы логирования для создания логгеров с фильтрацией по namespace
- * @version 0.6.3
+ * @version 0.7.0
  *
  * @example
  * Создание логгера:
@@ -122,22 +122,33 @@ function getLevelName (level) {
 }
 
 /**
- * Преобразует Map в обычный объект рекурсивно с учетом настроек глубины
+ * Подготавливает значение для логирования с учетом типа данных и настроек
  *
- * Ограничение вложенности применяется только к структурам Map:
- * - При достижении максимальной глубины Map заменяется на '[Max Map Depth Reached]'
- * - Глубина Map уменьшается на 1 с каждым уровнем вложенности
+ * Основная ответственность:
+ * - Преобразование Map в обычные объекты для корректного логирования
+ * - Ограничение глубины вложенности для Map структур
+ * - Ограничение длины строковых значений
+ * - Корректная обработка различных типов данных
  *
- * Для обычных объектов ограничение глубины не применяется вообще, независимо
- * от параметра mapDepthOnly. Все вложенные объекты обрабатываются полностью.
+ * Особенности реализации:
+ * - Для Map структур применяется ограничение глубины вложенности
+ * - Для строковых значений применяется ограничение длины, если включено
+ * - Обычные объекты обрабатываются рекурсивно без ограничения глубины
+ * - Ошибки и специальные типы сохраняются без изменений
  *
  * @param {*} value - Значение для преобразования
  * @param {number} depth - Максимальная глубина рекурсии (только для Map структур)
- * @param {boolean} mapDepthOnly - Зарезервировано для обратной совместимости (не используется)
+ * @param {number} maxStringLength - Максимальная длина строк (0 - без ограничений)
+ * @param {string} truncationMarker - Маркер обрезки для длинных строк
  * @returns {*} Преобразованное значение
  * @private
  */
-function convertMapsToObjects (value, depth = 8, mapDepthOnly = true) {
+function prepareValueForLogging (value, depth = 8, maxStringLength = 0, truncationMarker = '...') {
+  // Обработка строковых значений
+  if (typeof value === 'string' && maxStringLength > 0 && value.length > maxStringLength) {
+    return value.substring(0, maxStringLength) + truncationMarker;
+  }
+
   // Для Map структур
   if (value instanceof Map) {
     // Проверка глубины для Map структур согласно ожиданиям тестов
@@ -148,7 +159,7 @@ function convertMapsToObjects (value, depth = 8, mapDepthOnly = true) {
     const obj = {}
     for (const [k, v] of value.entries()) {
       // Для Map всегда уменьшаем глубину на 1 при рекурсии
-      obj[String(k)] = convertMapsToObjects(v, depth - 1, mapDepthOnly)
+      obj[String(k)] = prepareValueForLogging(v, depth - 1, maxStringLength, truncationMarker)
     }
     return obj
   }
@@ -156,7 +167,7 @@ function convertMapsToObjects (value, depth = 8, mapDepthOnly = true) {
   // Для массивов
   if (Array.isArray(value)) {
     // Для элементов массива передаем текущую глубину без изменений
-    return value.map(item => convertMapsToObjects(item, depth, mapDepthOnly))
+    return value.map(item => prepareValueForLogging(item, depth, maxStringLength, truncationMarker))
   }
 
   // Для обычных объектов - всегда обрабатываем без ограничений глубины
@@ -164,7 +175,7 @@ function convertMapsToObjects (value, depth = 8, mapDepthOnly = true) {
     const result = {}
     for (const [k, v] of Object.entries(value)) {
       // Не меняем глубину для обычных объектов, всегда передаем текущую глубину
-      result[k] = convertMapsToObjects(v, depth, mapDepthOnly)
+      result[k] = prepareValueForLogging(v, depth, maxStringLength, truncationMarker)
     }
     return result
   }
@@ -246,6 +257,7 @@ function patternMatches (namespace, pattern) {
  * Основная ответственность:
  * - Обработка разных форматов входных аргументов
  * - Преобразование Map в объекты для корректного логирования
+ * - Ограничение длины строковых значений
  * - Корректная передача аргументов в pino
  * - Специальная обработка объектов Error
  * - Сохранение контекста лога
@@ -259,9 +271,10 @@ function wrapLogMethod (logger, method) {
   return function (...args) {
     if (args.length === 0) return
 
-    // Получаем настройки глубины из окружения
+    // Получаем настройки из окружения
     const maxDepth = parseInt(dependencies.env.LOG_MAX_DEPTH, 10) || 8
-    const mapDepthOnly = dependencies.env.LOG_MAP_DEPTH_ONLY !== 'false'
+    const maxStringLength = parseInt(dependencies.env.LOG_MAX_STRING_LENGTH, 10) || 0
+    const truncationMarker = dependencies.env.LOG_TRUNCATION_MARKER || '...'
 
     const firstArg = args[0]
 
@@ -271,7 +284,11 @@ function wrapLogMethod (logger, method) {
         return { err: arg }
       }
       if (typeof arg === 'object' && arg !== null) {
-        return convertMapsToObjects(arg, maxDepth, mapDepthOnly)
+        return prepareValueForLogging(arg, maxDepth, maxStringLength, truncationMarker)
+      }
+      // Обработка строк в качестве прямых аргументов
+      if (typeof arg === 'string' && maxStringLength > 0 && arg.length > maxStringLength) {
+        return arg.substring(0, maxStringLength) + truncationMarker
       }
       return arg
     })

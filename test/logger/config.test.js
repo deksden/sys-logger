@@ -395,9 +395,9 @@ describe('(config.js) Модуль конфигурации логгера', () 
               translateTime: 'ISO:yyyy-mm-dd',
               ignore: 'hostname,pid,time',
               singleLine: true,
-              hideObject: ['password', 'secret'],
-              messageKey: 'msg',
-              levelKey: 'level',
+              // hideObject: ['password', 'secret'],
+              // messageKey: 'msg',
+              // levelKey: 'level',
               timestampKey: 'time'
             })
           })
