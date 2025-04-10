@@ -1,6 +1,6 @@
 {
   "name": "@fab33/sys-logger",
-  "version": "0.7.0",
+  "version": "0.8.4",
   "description": "Unified logging system with configurable transports, namespace filtering, and log levels",
   "type": "module",
   "main": "src/logger/logger.js",

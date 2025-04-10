@@ -1,3 +1,5 @@
+_*.xml
+_test*.json
 .idea
 .aider
 
