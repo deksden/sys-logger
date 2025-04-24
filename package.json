@@ -4,6 +4,7 @@
   "description": "Unified logging system with configurable transports, namespace filtering, and log levels",
   "type": "module",
   "main": "src/logger/logger.js",
+  "types": "src/logger/logger.d.ts",
   "files": [
     "src/logger"
   ],
