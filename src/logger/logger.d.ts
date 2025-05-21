@@ -21,11 +21,11 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type LogBindings = Record<string, any>;
 
 /**
- * @interface LoggerInstance
+ * @interface Logger
  * @description Интерфейс для экземпляра логгера, возвращаемого createLogger.
  * Предоставляет методы для логирования на разных уровнях и утилиты для управления логгером.
  */
-export interface LoggerInstance {
+export interface Logger {
   /**
    * @property {LogLevel} level
    * Позволяет получить или установить минимальный уровень логирования для данного экземпляра логгера.
@@ -147,9 +147,9 @@ export interface LoggerInstance {
    * Наследует конфигурацию родителя и добавляет указанные bindings ко всем своим лог-сообщениям.
    * Фильтрация по DEBUG все еще основана на namespace родительского логгера.
    * @param {LogBindings} bindings Объект с ключ-значение парами для добавления в контекст.
-   * @returns {LoggerInstance} Новый экземпляр дочернего логгера.
+   * @returns {Logger} Новый экземпляр дочернего логгера.
    */
-  child (bindings: LogBindings): LoggerInstance;
+  child (bindings: LogBindings): Logger;
 
   /**
    * Возвращает объект, содержащий все bindings (контекст), активные для данного экземпляра логгера.
@@ -178,10 +178,10 @@ export interface LoggerInstance {
  * Создает экземпляр логгера с возможностью фильтрации по namespace и расширенным API.
  * @param {string} [namespace] - Необязательный идентификатор (namespace) для этого логгера. Используется для фильтрации вывода через переменную окружения `DEBUG`.
  *                               Логгеры без namespace активны только если `DEBUG` не задан, пуст, или содержит `*` без явного запрета.
- * @returns {LoggerInstance} Объект логгера с методами `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `child`, `bindings`, `isLevelEnabled`, `silent` и свойством `level`.
+ * @returns {Logger} Объект логгера с методами `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `child`, `bindings`, `isLevelEnabled`, `silent` и свойством `level`.
  * @throws {SystemError} Бросает ошибку `TRANSPORT_INIT_FAILED`, если не удалось инициализировать базовый логгер или его транспорты (например, из-за ошибки конфигурации или прав доступа к файлам).
  */
-export function createLogger (namespace?: string): LoggerInstance;
+export function createLogger (namespace?: string): Logger;
 
 /**
  * @const {LogLevel[]}
