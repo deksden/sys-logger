@@ -1,8 +1,17 @@
 /**
  * @file src/logger/config.js
  * @description Модуль конфигурации логгера - загрузка настроек и создание транспортов
- * @version 0.6.2
+ * @version 0.8.0
  *
+ * @changelog
+ * - 0.8.0 (2025-06-11): Финальное исправление ошибки в `createPinoTransports`, из-за которой файловый транспорт некорректно
+ *                      обрабатывался как `pino-pretty`. Упрощена логика выбора таргета. Удален отладочный вывод.
+ * - 0.7.3 (2025-06-11): Добавлен временный отладочный вывод для диагностики.
+ * - 0.7.2 (2025-06-11): Рефакторинг `parseTransportConfigs`.
+ * - 0.7.1 (2025-06-11): Неудачная попытка исправления.
+ * - 0.7.0 (2025-06-11): Добавлена отказоустойчивость и поддержка `prettyPrint`.
+ *
+ * @description
  * Поддерживаются следующие переменные окружения:
  * - LOG_LEVEL - уровень логирования (trace, debug, info, warn, error, fatal)
  * - LOG_COLORIZE - цветной вывод в консоль (true/false)
@@ -122,7 +131,36 @@ export function processFilenameTemplate (template) {
 }
 
 /**
- * Создает директорию для логов если она не существует
+ * Проверяет доступность директории для записи и создает её, если нужно.
+ * В случае ошибки выводит сообщение в console.error и возвращает false.
+ * @param {string} logFolder - Путь к директории логов
+ * @returns {boolean} - true в случае успеха, false в случае ошибки
+ * @private
+ */
+function verifyLogDirectory (logFolder) {
+  const { fs } = dependencies
+  try {
+    // Проверяем, существует ли директория
+    if (!fs.existsSync(logFolder)) {
+      // Если нет, пытаемся создать
+      fs.mkdirSync(logFolder, { recursive: true })
+    }
+    // Проверяем права на запись (может выбросить исключение)
+    fs.accessSync(logFolder, fs.constants.W_OK)
+    return true
+  } catch (error) {
+    // Используем console.error, так как логгер еще не готов
+    console.error(
+      `[SYS_LOGGER FATAL] Failed to access or create log directory: ${logFolder}.` +
+      `\n       Reason: ${error.message}` +
+      `\n       The file transport for this directory will be disabled.`
+    )
+    return false
+  }
+}
+
+/**
+ * Создает директорию для логов если она не существует (для старого API)
  *
  * @param {string} logFolder - Путь к директории логов
  * @throws {SystemError} LOG_DIR_CREATE_FAILED при ошибке создания директории
@@ -152,10 +190,8 @@ function getLevelValue (level) {
 }
 
 /**
- * Парсит настройки множественных транспортов из переменных окружения
- *
- * Ищет и обрабатывает переменные в формате TRANSPORT{N}, TRANSPORT{N}_*
- * где N - порядковый номер транспорта, начиная с 1.
+ * Парсит настройки множественных транспортов из переменных окружения.
+ * Эта функция строго разделяет парсинг опций по типам транспортов.
  *
  * @param {Object} env - Переменные окружения
  * @returns {Array} Массив конфигураций транспортов
@@ -163,13 +199,13 @@ function getLevelValue (level) {
  */
 function parseTransportConfigs (env) {
   const transportConfigs = []
-
-  // Ищем переменные TRANSPORT1, TRANSPORT2, ...
   let transportIndex = 1
+
   while (env[`TRANSPORT${transportIndex}`]) {
     const prefix = `TRANSPORT${transportIndex}_`
     const type = env[`TRANSPORT${transportIndex}`].toLowerCase()
 
+    // 1. Создаем базовый объект с действительно общими полями
     const config = {
       type,
       level: env[`${prefix}LEVEL`] || 'info',
@@ -177,36 +213,32 @@ function parseTransportConfigs (env) {
       sync: env[`${prefix}SYNC`] === 'true'
     }
 
-    // Специфичные настройки для консольного транспорта
+    // 2. Добавляем опции строго в зависимости от типа транспорта
     if (type === 'console') {
-      config.colors = env[`${prefix}COLORS`] !== 'false'
-      config.translateTime = env[`${prefix}TRANSLATE_TIME`] || 'SYS:standard'
-      config.ignore = env[`${prefix}IGNORE`] || 'pid,hostname'
-      config.singleLine = env[`${prefix}SINGLE_LINE`] === 'true'
-      config.hideObjectKeys = env[`${prefix}HIDE_OBJECT_KEYS`] || ''
-      config.showMetadata = env[`${prefix}SHOW_METADATA`] === 'true'
+      Object.assign(config, {
+        colors: env[`${prefix}COLORS`] !== 'false',
+        translateTime: env[`${prefix}TRANSLATE_TIME`] || 'SYS:standard',
+        ignore: env[`${prefix}IGNORE`] || 'pid,hostname',
+        singleLine: env[`${prefix}SINGLE_LINE`] === 'true',
+        hideObjectKeys: env[`${prefix}HIDE_OBJECT_KEYS`] || '',
+        showMetadata: env[`${prefix}SHOW_METADATA`] === 'true',
+        timestampKey: env[`${prefix}TIMESTAMP_KEY`] || 'time'
+      })
+    } else if (type === 'file') {
+      Object.assign(config, {
+        folder: env[`${prefix}FOLDER`] || 'logs',
+        filename: env[`${prefix}FILENAME`] || '{app_name}.log',
+        destination: env[`${prefix}DESTINATION`] || '',
+        mkdir: env[`${prefix}MKDIR`] !== 'false',
+        append: env[`${prefix}APPEND`] !== 'false',
+        prettyPrint: env[`${prefix}PRETTY_PRINT`] === 'true',
+        // Опции ротации
+        rotate: env[`${prefix}ROTATE`] === 'true',
+        rotateMaxSize: parseInt(env[`${prefix}ROTATE_MAX_SIZE`], 10) || 10485760, // 10MB
+        rotateMaxFiles: parseInt(env[`${prefix}ROTATE_MAX_FILES`], 10) || 5,
+        rotateCompress: env[`${prefix}ROTATE_COMPRESS`] === 'true'
+      })
     }
-    // Специфичные настройки для файлового транспорта
-    else if (type === 'file') {
-      config.folder = env[`${prefix}FOLDER`] || 'logs'
-      config.filename = env[`${prefix}FILENAME`] || '{app_name}.log'
-      config.destination = env[`${prefix}DESTINATION`] || ''
-      config.mkdir = env[`${prefix}MKDIR`] !== 'false'
-      config.append = env[`${prefix}APPEND`] !== 'false'
-      config.prettyPrint = env[`${prefix}PRETTY_PRINT`] === 'true'
-
-      // Настройки ротации
-      config.rotate = env[`${prefix}ROTATE`] === 'true'
-      config.rotateMaxSize = parseInt(env[`${prefix}ROTATE_MAX_SIZE`], 10) || 10485760 // 10MB
-      config.rotateMaxFiles = parseInt(env[`${prefix}ROTATE_MAX_FILES`], 10) || 5
-      config.rotateCompress = env[`${prefix}ROTATE_COMPRESS`] === 'true'
-    }
-
-    // Общие настройки форматирования
-    config.timestamp = env[`${prefix}TIMESTAMP`] !== 'false'
-    config.messageKey = env[`${prefix}MESSAGE_KEY`] || 'msg'
-    config.timestampKey = env[`${prefix}TIMESTAMP_KEY`] || 'time'
-    config.levelKey = env[`${prefix}LEVEL_KEY`] || 'level'
 
     transportConfigs.push(config)
     transportIndex++
@@ -225,16 +257,80 @@ function parseTransportConfigs (env) {
 function createPinoTransports (transportConfigs) {
   const { pino, path } = dependencies
 
-  // Фильтруем отключенные транспорты
   const enabledTransports = transportConfigs.filter(t => t.enabled)
 
-  if (enabledTransports.length === 0) {
-    // Если нет транспортов, создаем дефолтный консольный
+  const targets = enabledTransports
+    .map(config => {
+      if (config.type === 'console') {
+        return {
+          level: config.level,
+          target: 'pino-pretty',
+          options: {
+            colorize: config.colors,
+            translateTime: config.translateTime,
+            ignore: config.ignore,
+            singleLine: config.singleLine,
+            timestampKey: config.timestampKey
+          }
+        }
+      }
+
+      if (config.type === 'file') {
+        let destination
+        if (config.destination && /^\d+$/.test(config.destination)) {
+          destination = parseInt(config.destination, 10)
+        } else if (config.destination) {
+          const dir = path.dirname(config.destination)
+          if (!verifyLogDirectory(dir)) return null
+          destination = config.destination
+        } else {
+          if (!verifyLogDirectory(config.folder)) return null
+          const processedFilename = processFilenameTemplate(config.filename)
+          destination = path.join(config.folder, processedFilename)
+        }
+
+        if (config.prettyPrint) {
+          // Ветка ДА: используем pino-pretty
+          return {
+            level: config.level,
+            target: 'pino-pretty',
+            options: {
+              destination,
+              colorize: true, // Разумный дефолт для вывода в консоль
+              translateTime: 'SYS:standard',
+              ignore: 'pid,hostname',
+              sync: config.sync
+            }
+          }
+        } else {
+          // Ветка НЕТ: используем стандартный pino/file
+          return {
+            level: config.level,
+            target: 'pino/file',
+            options: {
+              destination,
+              mkdir: config.mkdir,
+              append: config.append,
+              sync: config.sync
+            }
+          }
+        }
+      }
+
+      return null // Для любых других будущих типов
+    })
+    .filter(Boolean)
+
+  if (targets.length === 0) {
+    console.error(
+      '[SYS_LOGGER WARNING] All configured transports failed to initialize. ' +
+      'Falling back to a default console logger (level: info).'
+    )
     return {
       level: LOG_LEVELS.info,
       transport: pino.transport({
         targets: [{
-          level: 'info', // Добавлен уровень логирования для соответствия ожиданиям теста
+          level: 'info',
           target: 'pino-pretty',
           options: {
             colorize: true,
@@ -245,64 +341,14 @@ function createPinoTransports (transportConfigs) {
     }
   }
 
-  // Преобразуем в формат для pino.transport
-  const targets = enabledTransports.map(config => {
-    if (config.type === 'console') {
-      return {
-        level: config.level,
-        target: 'pino-pretty',
-        options: {
-          colorize: config.colors,
-          translateTime: config.translateTime,
-          ignore: config.ignore,
-          singleLine: config.singleLine,
-          // hideObject: config.hideObjectKeys.split(',').filter(k => k),
-          // messageKey: config.messageKey,
-          // levelKey: config.levelKey,
-          timestampKey: config.timestampKey
-        }
-      }
-    } else if (config.type === 'file') {
-      // Обрабатываем шаблоны в имени файла
-      const processedFilename = processFilenameTemplate(config.filename)
-
-      // Определяем назначение
-      let destination
-      if (config.destination) {
-        // Если указан числовой дескриптор (1=stdout, 2=stderr)
-        if (/^\d+$/.test(config.destination)) {
-          destination = parseInt(config.destination, 10)
-        } else {
-          destination = config.destination
-        }
-      } else {
-        // Если не указан, формируем полный путь
-        ensureLogDirectory(config.folder)
-        destination = path.join(config.folder, processedFilename)
-      }
-
-      return {
-        level: config.level,
-        target: 'pino/file',
-        options: {
-          destination,
-          mkdir: config.mkdir,
-          append: config.append,
-          sync: config.sync
-        }
-      }
-    }
-    return null
-  }).filter(Boolean)
-  // Создаем транспорт через pino.transport
   const transportOptions = {
     targets,
-    dedupe: false // Позволяем логам идти во все транспорты согласно их уровням
+    dedupe: false
   }
 
   try {
     return {
-      level: Math.min(...targets.map(t => getLevelValue(t.level))), // Минимальный уровень из всех транспортов
+      level: Math.min(...targets.map(t => getLevelValue(t.level))),
       transport: pino.transport(transportOptions)
     }
   } catch (error) {
@@ -323,7 +369,6 @@ function createPinoTransports (transportConfigs) {
 function createLegacyTransports (config) {
   const transports = []
 
-  // Консольный транспорт
   if (config.consoleOutput) {
     transports.push({
       type: 'console',
@@ -337,7 +382,6 @@ function createLegacyTransports (config) {
     })
   }
 
-  // Файловый транспорт
   if (config.fileOutput) {
     transports.push({
       type: 'file',
@@ -351,7 +395,6 @@ function createLegacyTransports (config) {
     })
   }
 
-  // Если оба транспорта отключены, создаем дефолтный консольный
   if (transports.length === 0) {
     transports.push({
       type: 'console',
@@ -375,15 +418,6 @@ function createLegacyTransports (config) {
  * - Загрузка настроек из env переменных
  * - Применение значений по умолчанию
  * - Валидация значений
- *
- * Значения по умолчанию:
- * - logLevel: 'info'
- * - colorize: true
- * - fileOutput: true
- * - consoleOutput: true
- * - logFolder: 'logs'
- * - sync: false
- * - pretty: false
  *
  * @param {Object} env - Переменные окружения
  * @returns {Object} Конфигурация логгера с настройками транспортов и форматирования
@@ -409,24 +443,6 @@ export function loadConfig (env) {
 /**
  * Создает конфигурацию транспорта для pino
  *
- * Основная ответственность:
- * - Настройка целевых транспортов (файл и консоль)
- * - Конфигурация форматирования через pino-pretty
- * - Управление синхронностью записи
- * - Преобразование уровней логирования
- *
- * Поддерживаются транспорты:
- * 1. Множественные транспорты через TRANSPORT1, TRANSPORT2, etc.
- *    - Различные типы (console, file)
- *    - Индивидуальные уровни и настройки
- *    - Применяется если найдено хотя бы одно определение TRANSPORT{N}
- *
- * 2. Обратная совместимость
- *    - Файловый - через pino.destination (LOG_FILE_OUTPUT)
- *    - Консольный - через pino-pretty (LOG_CONSOLE_OUTPUT)
- *    - Папка задается через LOG_FOLDER
- *    - В тестах всегда синхронный
- *
  * @param {Object} env - Переменные окружения
  * @returns {Object} Конфигурация транспорта для pino
  * @throws {SystemError} LOG_TRANSPORT_INIT_FAILED при любых ошибках инициализации,
@@ -437,73 +453,45 @@ export function createTransport (env) {
     const { pino, pretty } = dependencies
     const config = loadConfig(env)
 
-    // Используем новый формат транспортов, если они определены
     if (config.transportConfigs && config.transportConfigs.length > 0) {
       return createPinoTransports(config.transportConfigs)
     }
 
-    // Иначе используем старый формат (обратная совместимость)
     const appName = loadAppInfo().name
     const numericLevel = getLevelValue(config.logLevel)
-
-    // Формируем набор транспортов
     const streams = []
 
-    // Файловый транспорт если включен
     if (config.fileOutput) {
-      // Проверяем папку
       ensureLogDirectory(config.logFolder)
       const logFile = path.join(config.logFolder, `${appName}.log`)
-
-      // Файловый транспорт всегда синхронный в тестах
       streams.push({
         level: numericLevel,
-        stream: pino.destination({
-          dest: logFile,
-          sync: true, // В тестах всегда синхронно
-          mkdir: true
-        })
+        stream: pino.destination({ dest: logFile, sync: true, mkdir: true })
       })
     }
 
-    // Консольный транспорт если включен
     if (config.consoleOutput) {
-      const prettyOptions = {
-        colorize: config.colorize,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-        sync: true // В тестах всегда синхронно
-      }
-
-      // Всегда используем pino-pretty для форматированного вывода в консоль
-      streams.push({
-        level: numericLevel,
-        stream: pretty(prettyOptions)
-      })
-    }
-
-    // Проверяем что есть хотя бы один транспорт
-    if (streams.length === 0) {
-      // По умолчанию выводим в stdout через pino-pretty
       const prettyOptions = {
         colorize: config.colorize,
         translateTime: 'SYS:standard',
         ignore: 'pid,hostname',
         sync: true
       }
-      streams.push({
-        level: numericLevel,
-        stream: pretty(prettyOptions)
-      })
+      streams.push({ level: numericLevel, stream: pretty(prettyOptions) })
     }
 
-    // Создаем мультиплексный транспорт
+    if (streams.length === 0) {
+      const prettyOptions = {
+        colorize: config.colorize,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+        sync: true
+      }
+      streams.push({ level: numericLevel, stream: pretty(prettyOptions) })
+    }
+
     const transport = pino.multistream(streams)
-
-    return {
-      level: numericLevel,
-      transport
-    }
+    return { level: numericLevel, transport }
   } catch (error) {
     throw createTransportError(error.message, error)
   }

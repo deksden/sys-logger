@@ -1,7 +1,7 @@
 /**
  * @file src/logger/logger.js
  * @description Основной модуль подсистемы логирования для создания логгеров с фильтрацией по namespace
- * @version 0.8.4
+ * @version 0.8.5
  *
  * @example
  * Создание логгера:
